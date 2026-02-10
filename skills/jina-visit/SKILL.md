@@ -1,6 +1,6 @@
 ---
-name: visit
-description: 使用 Jina Reader API 访问网页并提取内容，提供简洁的网页总结和关键信息提取。可根据访问目的（goal）定制化总结。
+name: jina-visit
+description: 使用 Jina Reader API 访问网页并提取内容，提供简洁的网页总结和关键信息提取。可根据访问目的（goal）定制化总结。当用户说"访问"、"打开"、"查看"、"提取内容"、"获取信息"、"总结网页"、"网页总结"时使用。
 ---
 
 # Jina Reader Tool

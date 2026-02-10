@@ -1,6 +1,11 @@
 {
   "id": "jina",
+  "name": "Jina",
+  "description": "Jina Reader API plugin for OpenClaw",
   "kind": "extension",
+  "skills": [
+    "skills/jina-visit"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
