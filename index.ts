@@ -116,9 +116,9 @@ async function jinaVisit(params: { url: string; chunk?: number }): Promise<any> 
   const text = header + chunkContent + footer;
 
   return {
-    url: url,
+    url,
     chunk: validChunk,
-    totalChunks: totalChunks,
+    totalChunks,
     totalChars: fullContent.length,
     chunkSize: CHUNK_SIZE,
     content: text,
