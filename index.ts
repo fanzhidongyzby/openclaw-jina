@@ -72,8 +72,8 @@ async function jinaVisitCore(url: string): Promise<{ url: string; content: strin
 /**
  * Visit webpage with chunked reading support
  */
-async function jinaVisit(params: { url: string; chunk?: number; goal?: string }): Promise<any> {
-  const { url, chunk = 1, goal } = params;
+async function jinaVisit(params: { url: string; chunk?: number }): Promise<any> {
+  const { url, chunk = 1 } = params;
 
   console.log(`[jina] Visiting: ${url}, chunk: ${chunk}`);
 
@@ -113,10 +113,7 @@ async function jinaVisit(params: { url: string; chunk?: number; goal?: string })
     ? `\n\n[Call jina_visit with chunk=${validChunk + 1} to continue reading]`
     : `\n\n[End of content]`;
 
-  let text = header + chunkContent + footer;
-  if (goal && validChunk === 1) {
-    text = `Goal: ${goal}\n\n` + text;
-  }
+  const text = header + chunkContent + footer;
 
   return {
     url: url,
@@ -124,7 +121,6 @@ async function jinaVisit(params: { url: string; chunk?: number; goal?: string })
     totalChunks: totalChunks,
     totalChars: fullContent.length,
     chunkSize: CHUNK_SIZE,
-    goal: goal || null,
     content: text,
   };
 }
@@ -149,12 +145,11 @@ const jinaPlugin = {
         parameters: Type.Object({
           url: Type.String({ description: "Webpage URL" }),
           chunk: Type.Optional(Type.Number({ description: "Chunk number to read (1-based, default 1). Use this to read subsequent chunks." })),
-          goal: Type.Optional(Type.String({ description: "Optional goal for the content" })),
         }),
         async execute(_toolCallId, params) {
           console.log("[jina] jina_visit called with params:", params);
           try {
-            const result = await jinaVisit(params as { url: string; chunk?: number; goal?: string });
+            const result = await jinaVisit(params as { url: string; chunk?: number });
             console.log("[jina] jina_visit result:", { 
               url: result.url, 
               chunk: result.chunk, 
