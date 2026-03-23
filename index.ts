@@ -1,6 +1,6 @@
 /**
  * Jina Visit Plugin for OpenClaw
- * Jina Reader API integration
+ * Jina Reader API integration with chunked reading support
  */
 
 import { Type } from "@sinclair/typebox";
@@ -8,6 +8,15 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 
 console.log("[jina] Module loading - top level");
+
+// ============ Constants ============
+
+const CHUNK_SIZE = 8000; // 每片 8000 字符
+const MAX_CACHE_SIZE = 50; // 最多缓存 50 个页面
+
+// ============ Cache ============
+
+const pageCache = new Map<string, { content: string; fetchedAt: number }>();
 
 // ============ Helper ============
 
@@ -61,27 +70,62 @@ async function jinaVisitCore(url: string): Promise<{ url: string; content: strin
 }
 
 /**
- * Visit webpage
+ * Visit webpage with chunked reading support
  */
-async function jinaVisit(params: { url: string; goal?: string }): Promise<any> {
-  const { url, goal } = params;
+async function jinaVisit(params: { url: string; chunk?: number; goal?: string }): Promise<any> {
+  const { url, chunk = 1, goal } = params;
 
-  console.log(`[jina] Visiting: ${url}`);
-  const result = await jinaVisitCore(url);
+  console.log(`[jina] Visiting: ${url}, chunk: ${chunk}`);
 
-  // If goal is provided, simple truncate for now
-  if (goal) {
-    console.log(`[jina] Goal provided: ${goal}, truncating content`);
-    const truncated = result.content.substring(0, 2000);
-    result.content = truncated;
-    result.summary = truncated;
-    result.originalLength = result.content.length;
+  // 检查缓存
+  let cached = pageCache.get(url);
+  
+  if (!cached) {
+    // 抓取页面
+    const result = await jinaVisitCore(url);
+    cached = {
+      content: result.content,
+      fetchedAt: Date.now()
+    };
+    
+    // 存入缓存
+    pageCache.set(url, cached);
+    
+    // 清理旧缓存
+    if (pageCache.size > MAX_CACHE_SIZE) {
+      const oldestKey = [...pageCache.entries()]
+        .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0][0];
+      pageCache.delete(oldestKey);
+    }
+  }
+
+  const fullContent = cached.content;
+  const totalChunks = Math.ceil(fullContent.length / CHUNK_SIZE);
+  const validChunk = Math.max(1, Math.min(chunk, totalChunks));
+  
+  const startIdx = (validChunk - 1) * CHUNK_SIZE;
+  const endIdx = Math.min(startIdx + CHUNK_SIZE, fullContent.length);
+  const chunkContent = fullContent.substring(startIdx, endIdx);
+
+  // 构建返回结果
+  const header = `[Chunk ${validChunk}/${totalChunks} | Total: ${fullContent.length} chars]\n`;
+  const footer = validChunk < totalChunks
+    ? `\n\n[Call jina_visit with chunk=${validChunk + 1} to continue reading]`
+    : `\n\n[End of content]`;
+
+  let text = header + chunkContent + footer;
+  if (goal && validChunk === 1) {
+    text = `Goal: ${goal}\n\n` + text;
   }
 
   return {
     url: url,
+    chunk: validChunk,
+    totalChunks: totalChunks,
+    totalChars: fullContent.length,
+    chunkSize: CHUNK_SIZE,
     goal: goal || null,
-    result: result,
+    content: text,
   };
 }
 
@@ -90,7 +134,7 @@ async function jinaVisit(params: { url: string; goal?: string }): Promise<any> {
 const jinaPlugin = {
   id: "jina",
   name: "Jina",
-  description: "Jina Reader API plugin for OpenClaw",
+  description: "Jina Reader API plugin for OpenClaw with chunked reading support",
   kind: "extension" as const,
   configSchema: emptyPluginConfigSchema(),
   register(api: OpenClawPluginApi) {
@@ -101,16 +145,21 @@ const jinaPlugin = {
       {
         name: "jina_visit",
         label: "Jina Visit",
-        description: "Visit webpage and extract content via Jina Reader API",
+        description: "Visit webpage and extract content via Jina Reader API. Returns content in chunks (8000 chars each). First call returns chunk 1 and total count. Use 'chunk' parameter to read subsequent chunks.",
         parameters: Type.Object({
           url: Type.String({ description: "Webpage URL" }),
-          goal: Type.Optional(Type.String({ description: "Optional goal for LLM summarization" })),
+          chunk: Type.Optional(Type.Number({ description: "Chunk number to read (1-based, default 1). Use this to read subsequent chunks." })),
+          goal: Type.Optional(Type.String({ description: "Optional goal for the content" })),
         }),
         async execute(_toolCallId, params) {
           console.log("[jina] jina_visit called with params:", params);
           try {
-            const result = await jinaVisit(params as { url: string; goal?: string });
-            console.log("[jina] jina_visit result:", result);
+            const result = await jinaVisit(params as { url: string; chunk?: number; goal?: string });
+            console.log("[jina] jina_visit result:", { 
+              url: result.url, 
+              chunk: result.chunk, 
+              totalChunks: result.totalChunks 
+            });
             return json(result);
           } catch (err) {
             console.error("[jina] jina_visit error:", err);
